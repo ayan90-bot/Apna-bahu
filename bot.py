@@ -31,24 +31,54 @@ def start(update: Update, context: CallbackContext):
 def redeem(update: Update, context: CallbackContext):
     user = update.effective_user
     db.ensure_user(user.id, user.username)
+
     if db.is_banned(user.id):
         update.message.reply_text("You are banned.")
         return
-    # If premium -> allow unlimited redeem
+
+    # Premium user — unlimited redeem
     if db.is_premium(user.id):
         update.message.reply_text(PROCESSING)
-        # notify admin
-        context.bot.send_message(ADMIN_ID, f"User {user.id} (premium) used /redeem")
+        context.bot.send_message(
+            ADMIN_ID,
+            f"💎 Premium user redeemed:\n"
+            f"ID: {user.id}\nUsername: @{user.username or 'N/A'}\n"
+            f"Message: {update.message.text}"
+        )
+        try:
+            context.bot.forward_message(
+                ADMIN_ID,
+                chat_id=update.message.chat_id,
+                message_id=update.message.message_id
+            )
+        except Exception as e:
+            context.bot.send_message(ADMIN_ID, f"(Could not forward: {e})")
         return
-    # free user
+
+    # Free user — limit check
     if db.has_redeemed_free(user.id):
         update.message.reply_text(PURCHASE_PROMPT)
         return
-    # first time free redeem
+
+    # First time redeem
     db.set_redeemed_free(user.id)
     update.message.reply_text(PROCESSING)
-    # forward to admin
-    context.bot.forward_message(ADMIN_ID, chat_id=update.message.chat_id, message_id=update.message.message_id)
+
+    # Notify admin
+    context.bot.send_message(
+        ADMIN_ID,
+        f"🆓 Free user redeemed:\n"
+        f"ID: {user.id}\nUsername: @{user.username or 'N/A'}\n"
+        f"Message: {update.message.text}"
+    )
+    try:
+        context.bot.forward_message(
+            ADMIN_ID,
+            chat_id=update.message.chat_id,
+            message_id=update.message.message_id
+        )
+    except Exception as e:
+        context.bot.send_message(ADMIN_ID, f"(Could not forward: {e})")
 
 
 def genk(update: Update, context: CallbackContext):
@@ -92,15 +122,15 @@ def premium_cmd(update: Update, context: CallbackContext):
     if res is False:
         update.message.reply_text("Key already used.")
         return
-    # res == days
     db.activate_premium(user.id, res)
     update.message.reply_text("Premium Activated ⚡️")
-    # notify admin
-    context.bot.send_message(ADMIN_ID, f"User {user.id} activated premium for {res} days using key {key}")
+    context.bot.send_message(
+        ADMIN_ID,
+        f"User {user.id} activated premium for {res} days using key {key}"
+    )
 
 
 def reply_user(update: Update, context: CallbackContext):
-    # This is for regular users to message admin personally
     user = update.effective_user
     db.ensure_user(user.id, user.username)
     if db.is_banned(user.id):
@@ -110,15 +140,15 @@ def reply_user(update: Update, context: CallbackContext):
         update.message.reply_text("Usage: /reply <your message>")
         return
     text = " ".join(context.args)
-    # forward message to admin with info
-    context.bot.send_message(ADMIN_ID, f"Personal message from {user.id} ({user.username}):\n{text}")
+    context.bot.send_message(
+        ADMIN_ID,
+        f"Personal message from {user.id} ({user.username}):\n{text}"
+    )
     update.message.reply_text("Your message was sent to admin.")
 
 
 def replyto(update: Update, context: CallbackContext):
-    # admin replies to user
-    user = update.effective_user
-    if user.id != ADMIN_ID:
+    if update.effective_user.id != ADMIN_ID:
         update.message.reply_text("Only admin can reply to users")
         return
     if len(context.args) < 2:
@@ -212,6 +242,7 @@ def main():
 
     updater.start_polling()
     updater.idle()
+
 
 if __name__ == '__main__':
     main()
